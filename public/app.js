@@ -430,6 +430,86 @@ async function savePlan(r) {
   } catch (e) { toast(e.message, true); }
 }
 
+/* ---------- 巡场弱信号诊断（只读） ---------- */
+
+const WEAK_REASON_TEXT = {
+  recovered: '已恢复',
+  interrupted: '中断',
+  unrecovered: '未恢复',
+};
+
+function renderWeakResult(data) {
+  const box = $('#weak-result');
+  const totalEvents = data.devices.reduce((s, d) => s + d.events.length, 0);
+  const badge = $('#weak-event-count');
+  badge.textContent = totalEvents === 0 ? '无事件' : `${totalEvents} 起事件`;
+  badge.className = `badge ${totalEvents === 0 ? 'ok' : 'danger'}`;
+
+  const p = data.params || {};
+  const summary = `
+    <p class="plan-meta" style="margin:10px 0 6px">
+      共 ${data.records} 条记录 ｜ 进入阈值 <span class="freq">${fmt(p.enterThreshold)}</span> dBm ｜
+      恢复阈值 <span class="freq">${fmt(p.recoverThreshold)}</span> dBm ｜
+      最大采样间隔 <span class="freq">${fmt(p.maxInterval)}</span> 秒
+    </p>`;
+
+  const blocks = data.devices.map((d) => {
+    const rows = d.events.map((e) => `
+      <tr>
+        <td class="freq">${fmt(e.start)}</td>
+        <td class="freq">${fmt(e.end)}</td>
+        <td class="freq">${fmt(e.duration)}</td>
+        <td><span class="tag reason-${e.endReason}">${WEAK_REASON_TEXT[e.endReason] || esc(e.endReason)}</span></td>
+      </tr>`).join('');
+    const table = d.events.length
+      ? `<div class="table-wrap"><table>
+          <thead><tr><th>开始 (秒)</th><th>结束 (秒)</th><th>持续 (秒)</th><th>结束原因</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table></div>`
+      : '<p class="muted" style="margin:6px 0 0">无弱信号事件</p>';
+    return `
+      <div class="weak-device">
+        <p class="weak-device-head"><strong>${esc(d.name)}</strong> <span class="muted">(ID ${d.id})</span>
+          <span class="badge ${d.events.length === 0 ? 'ok' : 'danger'}">${d.events.length} 起</span>
+          <span class="muted">｜ ${d.samples} 个采样点 ｜ 累计持续 <span class="freq">${fmt(d.totalDuration)}</span> 秒</span>
+        </p>
+        ${table}
+      </div>`;
+  }).join('');
+
+  box.innerHTML = `<div class="result-box ${totalEvents === 0 ? 'success' : 'failure'}">${summary}${blocks}</div>`;
+}
+
+$('#btn-weak-run').addEventListener('click', async () => {
+  const btn = $('#btn-weak-run');
+  btn.disabled = true;
+  try {
+    const data = await api('/api/weak-signal-events', {
+      method: 'POST',
+      body: JSON.stringify({
+        csv: $('#weak-csv').value,
+        enterThreshold: Number($('#weak-enter').value),
+        recoverThreshold: Number($('#weak-recover').value),
+        maxInterval: Number($('#weak-max-interval').value),
+      }),
+    });
+    renderWeakResult(data);
+  } catch (e) {
+    toast(e.message, true);
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+$('#btn-weak-clear').addEventListener('click', () => {
+  $('#weak-csv').value = '';
+  $('#weak-result').innerHTML = '';
+  const badge = $('#weak-event-count');
+  badge.textContent = '—';
+  badge.className = 'badge';
+  toast('已清除本次诊断');
+});
+
 /* ---------- 已保存方案 ---------- */
 
 async function loadPlans() {

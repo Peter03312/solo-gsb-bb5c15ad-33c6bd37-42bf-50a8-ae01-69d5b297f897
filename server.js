@@ -5,6 +5,7 @@ const crypto = require('crypto');
 const express = require('express');
 const db = require('./db');
 const { mhzToHz, hzToMhz, computeConflicts, coordinate, normalizeOccupiedBands, scanCsvToBands, findSwitchOrder } = require('./lib/intermod');
+const { diagnoseWeakSignal } = require('./lib/weak-signal');
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
@@ -174,6 +175,33 @@ app.post('/api/scan-bands', (req, res) => {
   const body = req.body || {};
   try {
     res.json(scanCsvToBands(body.csv, body.interval, body.threshold));
+  } catch (e) {
+    badRequest(res, e.message);
+  }
+});
+
+// ---------- 巡场弱信号诊断 ----------
+
+/**
+ * 巡场弱信号诊断（纯计算，只读，不写入设备或方案，原始采样不入库）。
+ * body：{ csv, enterThreshold, recoverThreshold, maxInterval }
+ *   csv              无表头三列 CSV 文本（时间 秒, 设备 ID, 接收电平 dBm），空行忽略
+ *   enterThreshold   进入阈值（dBm，有限数值）
+ *   recoverThreshold 恢复阈值（dBm，有限数值），必须大于进入阈值
+ *   maxInterval      最大采样间隔（秒，正数）
+ * 整批校验非负有限时间、有限电平、现有设备 ID 与最多 1000 条非空记录，
+ * 错误指出行号；按设备分组排序，同设备同时间取最低电平，滞回状态机判定事件。
+ * 返回 { records, params, devices: [{ id, name, samples, events, totalDuration }] }，
+ * 其中 events 含 { start, end, duration, endReason }（recovered/interrupted/unrecovered）。
+ */
+app.post('/api/weak-signal-events', (req, res) => {
+  const body = req.body || {};
+  try {
+    res.json(diagnoseWeakSignal(body.csv, {
+      enterThreshold: body.enterThreshold,
+      recoverThreshold: body.recoverThreshold,
+      maxInterval: body.maxInterval,
+    }, listDevices()));
   } catch (e) {
     badRequest(res, e.message);
   }
