@@ -171,7 +171,7 @@ input:focus { outline: 2px solid var(--accent-dark); border-color: var(--accent)
   padding-top: 10px;
   border-top: 1px dashed var(--card-border);
 }
-#scan-csv {
+#scan-csv, #weak-csv {
   width: 100%;
   background: #121a2b;
   border: 1px solid var(--card-border);
@@ -183,7 +183,7 @@ input:focus { outline: 2px solid var(--accent-dark); border-color: var(--accent)
   resize: vertical;
   margin-top: 8px;
 }
-#scan-csv:focus { outline: 2px solid var(--accent-dark); border-color: var(--accent); }
+#scan-csv:focus, #weak-csv:focus { outline: 2px solid var(--accent-dark); border-color: var(--accent); }
 .scan-params {
   display: flex;
   gap: 12px;
@@ -248,6 +248,19 @@ input:focus { outline: 2px solid var(--accent-dark); border-color: var(--accent)
 }
 .tag.locked { color: var(--warn); }
 .tag.moved { color: var(--ok); }
+.tag.recovered { color: var(--ok); }
+.tag.interrupted { color: var(--warn); }
+.tag.unrecovered { color: var(--danger); }
+
+/* ---------- 巡场弱信号诊断 ---------- */
+.weak-device {
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+  background: rgba(38, 51, 82, 0.25);
+}
+.weak-device:last-child { margin-bottom: 0; }
 
 .plan-item {
   border: 1px solid var(--card-border);

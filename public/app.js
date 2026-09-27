@@ -42,6 +42,7 @@ async function loadDevices() {
   const data = await api('/api/devices');
   devices = data.devices;
   renderDevices(data.max);
+  renderWeakDeviceIds();
   await refreshConflicts();
 }
 
@@ -429,6 +430,95 @@ async function savePlan(r) {
     await loadPlans();
   } catch (e) { toast(e.message, true); }
 }
+
+/* ---------- 巡场弱信号诊断（只读） ---------- */
+
+const WEAK_REASON_LABEL = {
+  recovered: { text: '已恢复', cls: 'recovered' },
+  interrupted: { text: '中断', cls: 'interrupted' },
+  unrecovered: { text: '未恢复', cls: 'unrecovered' },
+};
+
+/** 在诊断卡片中列出当前可用设备 ID（CSV 仅接受这些 ID） */
+function renderWeakDeviceIds() {
+  const el = $('#weak-device-ids');
+  if (!el) return;
+  el.textContent = devices.length === 0
+    ? '当前设备 ID：（请先在上方录入设备）'
+    : `当前设备 ID：${devices.map((d) => `${d.id} = ${d.name}`).join('；')}`;
+}
+
+function weakReasonTag(endReason) {
+  const r = WEAK_REASON_LABEL[endReason] || { text: endReason, cls: '' };
+  return `<span class="tag ${r.cls}">${esc(r.text)}</span>`;
+}
+
+function renderWeakResult(data) {
+  const box = $('#weak-result');
+  const totalEvents = data.devices.reduce((s, d) => s + d.eventCount, 0);
+  const totalDuration = parseFloat(data.devices.reduce((s, d) => s + d.totalDuration, 0).toFixed(6));
+
+  const head = `
+    <p class="muted" style="margin:0 0 10px">
+      共 ${data.records} 条记录、${data.devices.length} 台设备有采样；
+      检出 <strong>${totalEvents}</strong> 个弱信号事件，累计 <span class="freq">${fmt(totalDuration)}</span> 秒。
+      阈值：进入 <span class="freq">${fmt(data.params.enterThreshold)}</span> dBm ／
+      恢复 <span class="freq">${fmt(data.params.recoverThreshold)}</span> dBm ／
+      最大采样间隔 <span class="freq">${fmt(data.params.maxGap)}</span> 秒。
+    </p>`;
+
+  const deviceBlocks = data.devices.map((d) => {
+    const summary = `
+      <p style="margin:0 0 6px"><strong>${esc(d.name)}</strong> <span class="muted">（ID ${d.id}）</span>
+        <span class="badge ${d.eventCount > 0 ? 'danger' : 'ok'}">${d.eventCount} 个事件</span>
+        <span class="muted">采样 ${d.samples} 点 ｜ 累计弱信号 <span class="freq">${fmt(d.totalDuration)}</span> 秒</span>
+      </p>`;
+    if (d.events.length === 0) {
+      return `<div class="weak-device">${summary}<p class="ok-text" style="margin:0">✓ 未检出弱信号事件</p></div>`;
+    }
+    const rows = d.events.map((ev) => `
+      <tr>
+        <td class="muted">#${ev.index}</td>
+        <td class="freq">${fmt(ev.start)}</td>
+        <td class="freq">${fmt(ev.end)}</td>
+        <td class="freq">${fmt(ev.duration)}</td>
+        <td>${weakReasonTag(ev.endReason)}</td>
+      </tr>`).join('');
+    return `
+      <div class="weak-device">${summary}
+        <div class="table-wrap"><table>
+          <thead><tr><th>#</th><th>开始 (秒)</th><th>结束 (秒)</th><th>持续 (秒)</th><th>结束原因</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table></div>
+      </div>`;
+  }).join('');
+
+  box.innerHTML = `<div class="result-box">${head}${deviceBlocks}</div>`;
+}
+
+$('#btn-weak-diag').addEventListener('click', async () => {
+  const btn = $('#btn-weak-diag');
+  btn.disabled = true;
+  btn.textContent = '诊断中…';
+  try {
+    const data = await api('/api/weak-signal', {
+      method: 'POST',
+      body: JSON.stringify({
+        csv: $('#weak-csv').value,
+        enterThreshold: Number($('#weak-enter').value),
+        recoverThreshold: Number($('#weak-recover').value),
+        maxGap: Number($('#weak-gap').value),
+      }),
+    });
+    renderWeakResult(data);
+  } catch (e) {
+    $('#weak-result').innerHTML = '';
+    toast(e.message, true);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '开始诊断';
+  }
+});
 
 /* ---------- 已保存方案 ---------- */
 

@@ -9,7 +9,7 @@
 <body>
   <header>
     <h1>🎤 无线麦克风频率协调工具</h1>
-    <p class="subtitle">互调冲突分析 · 自动频率协调 · 方案管理（最多 8 个设备）</p>
+    <p class="subtitle">互调冲突分析 · 自动频率协调 · 巡场弱信号诊断 · 方案管理（最多 8 个设备）</p>
   </header>
 
   <main>
@@ -83,6 +83,22 @@
         </div>
       </div>
       <div id="coord-result"></div>
+    </section>
+
+    <!-- 巡场弱信号诊断 -->
+    <section class="card">
+      <div class="card-head"><h2>巡场弱信号诊断</h2></div>
+      <p class="hint">粘贴无表头三列 CSV：<span class="freq">时间秒, 设备ID, 接收电平dBm</span>（每行一条，空行忽略，最多 1000 条非空记录）。设备 ID 仅接受当前已录入设备；时间须为非负数值、电平为有限数值，任一记录格式错误都会指出原始行号并<strong>整批拒绝</strong>。诊断为纯计算，不会写入设备或方案。</p>
+      <p class="hint" id="weak-device-ids">当前设备 ID：（请先在上方录入设备）</p>
+      <textarea id="weak-csv" rows="6" spellcheck="false" placeholder="0, 1, -75&#10;10, 1, -101&#10;20, 1, -88&#10;30, 1, -82"></textarea>
+      <div class="scan-params">
+        <label>进入阈值 (dBm)<input id="weak-enter" type="number" step="0.1" value="-100" /></label>
+        <label>恢复阈值 (dBm)<input id="weak-recover" type="number" step="0.1" value="-90" /></label>
+        <label>最大采样间隔 (秒)<input id="weak-gap" type="number" step="0.000001" min="0.000001" value="30" /></label>
+        <button type="button" class="btn btn-primary" id="btn-weak-diag">开始诊断</button>
+      </div>
+      <p class="hint">初始为正常状态：电平 &lt; 进入阈值开启弱信号事件；电平 ≥ 恢复阈值才结束；两阈值之间保持原状态。相邻采样间隔<strong>超过</strong>最大采样间隔时，事件止于前一采样并标记「中断」，当前点从正常状态重新判断；输入结束仍未恢复则止于末次采样并标记「未恢复」。</p>
+      <div id="weak-result"></div>
     </section>
 
     <!-- 已保存方案 -->

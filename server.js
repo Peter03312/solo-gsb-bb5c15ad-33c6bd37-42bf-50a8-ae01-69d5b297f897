@@ -5,6 +5,7 @@ const crypto = require('crypto');
 const express = require('express');
 const db = require('./db');
 const { mhzToHz, hzToMhz, computeConflicts, coordinate, normalizeOccupiedBands, scanCsvToBands, findSwitchOrder } = require('./lib/intermod');
+const { walkTestCsvToEvents } = require('./lib/weak-signal');
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
@@ -174,6 +175,50 @@ app.post('/api/scan-bands', (req, res) => {
   const body = req.body || {};
   try {
     res.json(scanCsvToBands(body.csv, body.interval, body.threshold));
+  } catch (e) {
+    badRequest(res, e.message);
+  }
+});
+
+// ---------- 巡场弱信号诊断 ----------
+
+/** 结束原因代码 → 中文说明（与界面一致） */
+const WEAK_END_REASON_TEXT = {
+  recovered: '已恢复（达到恢复阈值）',
+  interrupted: '中断（采样间隔超过上限）',
+  unrecovered: '未恢复（输入结束）',
+};
+
+/**
+ * 巡场弱信号诊断（只读，不写回设备或方案，原始采样不入库）。
+ * body：{ csv, enterThreshold, recoverThreshold, maxGap }
+ *   csv              无表头三列 CSV 文本（时间秒, 设备ID, 接收电平dBm），空行忽略
+ *   enterThreshold   进入阈值（dBm，严格小于恢复阈值）
+ *   recoverThreshold 恢复阈值（dBm）
+ *   maxGap           最大采样间隔（秒，正数；相邻间隔超过该值即判中断）
+ * 整批校验：设备 ID 必须为当前已录入设备、数值有限、时间非负、最多 1000 条非空记录，
+ * 任一错误指出原始行号并整批拒绝。按设备分组、时间升序，同设备同时间取最低电平，
+ * 按「进入/恢复」迟滞状态机诊断弱信号事件；返回各设备事件起止/持续秒数/结束原因与累计持续秒数。
+ */
+app.post('/api/weak-signal', (req, res) => {
+  const body = req.body || {};
+  const deviceRefs = listDevices().map((d) => ({ id: d.id, name: d.name }));
+  try {
+    const result = walkTestCsvToEvents(body.csv, {
+      enterThreshold: body.enterThreshold,
+      recoverThreshold: body.recoverThreshold,
+      maxGap: body.maxGap,
+    }, deviceRefs);
+    // 附加结束原因中文说明，供界面直接展示（核心库保持纯计算）
+    res.json({
+      ...result,
+      params: {
+        enterThreshold: Number(body.enterThreshold),
+        recoverThreshold: Number(body.recoverThreshold),
+        maxGap: Number(body.maxGap),
+      },
+      reasonText: WEAK_END_REASON_TEXT,
+    });
   } catch (e) {
     badRequest(res, e.message);
   }
